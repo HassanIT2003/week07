@@ -101,20 +101,11 @@ jobs:
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      # If you prefer, you can remove this step (docker push works after azure/login),
-      # but keeping it is fine too.
+      # Optional: you can remove this step; docker push works after azure/login
       - name: Login to Azure Container Registry
         run: az acr login --name ${{ env.ACR_NAME }}
 
-      # Optional: show folders to confirm paths
-      - name: Show backend tree
-        run: |
-          pwd
-          ls -la backend
-          ls -la backend/product_service
-          ls -la backend/order_service
-
-      # Build locally, then tag & push to ACR (avoids secret masking issues)
+      # -------- PRODUCT SERVICE --------
       - name: Build Product Service (local)
         working-directory: backend/product_service
         run: |
@@ -122,9 +113,13 @@ jobs:
 
       - name: Tag & Push Product Service to ACR
         run: |
-          docker tag product_service:latest ${{ env.ACR_LOGIN_SERVER }}/product_service:latest
-          docker push ${{ env.ACR_LOGIN_SERVER }}/product_service:latest
+          # sanitize secret: remove CR/LF
+          REGISTRY=$(printf "%s" "${ACR_LOGIN_SERVER}" | tr -d '\r\n')
+          echo "Using registry: ${REGISTRY#"$REGISTRY"}" >/dev/null  # no-op to avoid leaking
+          docker tag product_service:latest "${REGISTRY}/product_service:latest"
+          docker push "${REGISTRY}/product_service:latest"
 
+      # -------- ORDER SERVICE --------
       - name: Build Order Service (local)
         working-directory: backend/order_service
         run: |
@@ -132,8 +127,9 @@ jobs:
 
       - name: Tag & Push Order Service to ACR
         run: |
-          docker tag order_service:latest ${{ env.ACR_LOGIN_SERVER }}/order_service:latest
-          docker push ${{ env.ACR_LOGIN_SERVER }}/order_service:latest
+          REGISTRY=$(printf "%s" "${ACR_LOGIN_SERVER}" | tr -d '\r\n')
+          docker tag order_service:latest "${REGISTRY}/order_service:latest"
+          docker push "${REGISTRY}/order_service:latest"
 
       - name: Logout from Azure
         if: always()
