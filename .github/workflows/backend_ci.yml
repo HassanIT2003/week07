@@ -1,24 +1,18 @@
-# week07/.github/workflows/backend_ci.yml //again
+# week07/.github/workflows/backend_ci.yml
 
 name: Backend CI - Test, Build and Push Images to ACR
 
 on:
-  # Manual trigger
   workflow_dispatch:
-  # Auto on pushes to main
   push:
     branches: [ main ]
     paths:
       - 'backend/**'
       - '.github/workflows/backend_ci.yml'
 
-# Global env
 env:
-  # Short registry name (no domain)
   ACR_NAME: sit722w07465947226
-  # FQDN (from repo secret)
   ACR_LOGIN_SERVER: ${{ secrets.ACR_LOGIN_SERVER }}
-  # Unique image tag (optional, not used below since we push :latest)
   IMAGE_TAG: ${{ github.sha }}-${{ github.run_id }}
 
 jobs:
@@ -112,12 +106,12 @@ jobs:
 
       - name: Build and Push Product Service Image
         run: |
-          docker build -t ${{ env.ACR_LOGIN_SERVER }}/product_service:latest ./backend/product_service/
+          DOCKER_BUILDKIT=0 docker build -t ${{ env.ACR_LOGIN_SERVER }}/product_service:latest ./backend/product_service
           docker push ${{ env.ACR_LOGIN_SERVER }}/product_service:latest
 
       - name: Build and Push Order Service Image
         run: |
-          docker build -t ${{ env.ACR_LOGIN_SERVER }}/order_service:latest ./backend/order_service/
+          DOCKER_BUILDKIT=0 docker build -t ${{ env.ACR_LOGIN_SERVER }}/order_service:latest ./backend/order_service
           docker push ${{ env.ACR_LOGIN_SERVER }}/order_service:latest
 
       - name: Logout from Azure
