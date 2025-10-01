@@ -11,13 +11,16 @@ on:
       - '.github/workflows/backend_ci.yml'
 
 env:
-  # e.g., sarah7p28703.azurecr.io  (stored as a repo secret)
+  # short registry name (no domain)
+  ACR_NAME: sit722w07465947226
+  # full registry FQDN from repo secret (e.g., sit722w07465947226.azurecr.io)
   ACR_LOGIN_SERVER: ${{ secrets.ACR_LOGIN_SERVER }}
   IMAGE_TAG: ${{ github.sha }}-${{ github.run_id }}
 
 jobs:
   test_and_lint_backends:
     runs-on: ubuntu-latest
+
     services:
       product_db:
         image: postgres:15
@@ -30,7 +33,8 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-        ports: [ "5432:5432" ]
+        ports:
+          - 5432:5432
 
       order_db:
         image: postgres:15
@@ -43,7 +47,8 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-        ports: [ "5433:5432" ]
+        ports:
+          - 5433:5432
 
     steps:
       - name: Checkout repository
@@ -91,20 +96,45 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # ✅ Login to ACR using admin credentials (no SP required)
-      - name: Login to ACR (Docker)
-        uses: docker/login-action@v3
+      - name: Azure Login
+        uses: azure/login@v1
         with:
-          registry: ${{ env.ACR_LOGIN_SERVER }}
-          username: ${{ secrets.REGISTRY_USERNAME }}
-          password: ${{ secrets.REGISTRY_PASSWORD }}
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      - name: Build and Push Product Service Image
+      # If you prefer, you can remove this step (docker push works after azure/login),
+      # but keeping it is fine too.
+      - name: Login to Azure Container Registry
+        run: az acr login --name ${{ env.ACR_NAME }}
+
+      # Optional: show folders to confirm paths
+      - name: Show backend tree
         run: |
-          docker build -t ${{ env.ACR_LOGIN_SERVER }}/product_service:latest ./backend/product_service/
+          pwd
+          ls -la backend
+          ls -la backend/product_service
+          ls -la backend/order_service
+
+      # Build locally, then tag & push to ACR (avoids secret masking issues)
+      - name: Build Product Service (local)
+        working-directory: backend/product_service
+        run: |
+          DOCKER_BUILDKIT=0 docker build -t product_service:latest .
+
+      - name: Tag & Push Product Service to ACR
+        run: |
+          docker tag product_service:latest ${{ env.ACR_LOGIN_SERVER }}/product_service:latest
           docker push ${{ env.ACR_LOGIN_SERVER }}/product_service:latest
 
-      - name: Build and Push Order Service Image
+      - name: Build Order Service (local)
+        working-directory: backend/order_service
         run: |
-          docker build -t ${{ env.ACR_LOGIN_SERVER }}/order_service:latest ./backend/order_service/
+          DOCKER_BUILDKIT=0 docker build -t order_service:latest .
+
+      - name: Tag & Push Order Service to ACR
+        run: |
+          docker tag order_service:latest ${{ env.ACR_LOGIN_SERVER }}/order_service:latest
           docker push ${{ env.ACR_LOGIN_SERVER }}/order_service:latest
+
+      - name: Logout from Azure
+        if: always()
+        run: az logout
